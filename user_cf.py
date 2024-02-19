@@ -9,6 +9,7 @@ class UserCF:
         self.file_path = file_path
         self._init_frame()
         self.max_rating = 5
+        self.movie_mean_rating = dict(self.frame.groupby('item_id').mean('rating')['rating'])
 
     def _init_frame(self):
         self.frame = pd.read_csv(self.file_path)
@@ -65,7 +66,8 @@ class UserCF:
         for user_id in other_users_id:
             # Get each other user's movies and ratings
             other_data = self.frame[self.frame['user_id'] == user_id]
-            other_ratings = dict(zip(other_data['item_id'], other_data['rating']))
+            # if user have multiple ratings for one movie, user the last rating
+            other_ratings = dict(zip(other_data['item_id'], other_data['rating'])) 
             
             if user_sim == 'watched':
                 similarity = self._cosine_sim_watched(list(target_ratings.keys()), list(other_ratings.keys()))
@@ -95,14 +97,37 @@ class UserCF:
         top_n_user_data = [self.frame[self.frame['user_id'] == user_id] for user_id, _ in top_n_users]
         interest_list = []
         for movie_id in candidates_movies:
-            tmp = []
+            tmp = [] # store rating for user_j
+            watched_cnt = 0 # record number of users in top_n who watched this movie
             for user_data in top_n_user_data:
                 if movie_id in user_data['item_id'].values:
-                    tmp.append(user_data[user_data['item_id'] == movie_id]['rating'].values[0]/self.max_rating)
+                    tmp.append(user_data[user_data['item_id'] == movie_id]['rating'].values[-1])
+                    watched_cnt += 1
                 else:
                     tmp.append(0)
-            # predicted rating = sum of (user_similarity_ij * user_j_rating) for all J
-            interest = sum([top_n_users[i][1] * tmp[i] for i in range(len(top_n_users))])
+                    # # Wrong idea: if user_j did not watch this movie, fill the rating with the mean rating of this movie
+                    # tmp.append(self.movie_mean_rating[movie_id])
+
+            # predicted rating = sum of (user_similarity_ij * user_j_rating) for all J / normalize factor
+            normal_factor1 = len(top_n_users) # |J|
+            normal_factor2 = sum([top_n_users[i][1] for i in range(len(top_n_users))]) # sum of all user_similarity_ij
+            normal_factor3 = watched_cnt
+            normal_factor4 = sum([top_n_users[i][1] for i in range(len(top_n_users)) if tmp[i] != 0]) # sum of user_similarity_ij only for user_j who watched this movie.
+            if watched_cnt == 0:
+                interest = 0
+            # The following solved the issue that interest score varies too much for a niche movie
+            # by adding an adjustment to the denominator
+            else:
+                smoothing_param = 0.5 * top_n
+                # Original factor with smoothing applied
+                adjusted_factor = (watched_cnt + smoothing_param) / (len(top_n_users) + smoothing_param)
+
+                # Using a logarithmic scale to reduce the range of adjustment
+                log_adjusted_factor = np.log(watched_cnt + smoothing_param) / np.log(len(top_n_users) + smoothing_param)
+
+                weighted_sum = sum([top_n_users[i][1] * tmp[i] for i in range(len(top_n_users))]) 
+                interest = weighted_sum / normal_factor4 * log_adjusted_factor
+
             interest_list.append((movie_id, interest))
         interest_list = sorted(interest_list, key=lambda x: x[1], reverse=True)
         return interest_list[:top_n]
