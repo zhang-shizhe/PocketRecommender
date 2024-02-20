@@ -119,7 +119,7 @@ class ItemCF:
         """
         # pool of movies with user-interaction
         recent_n_items = self._get_n_recent_items(target_user_id, top_n)
-        # random_n_items = self._get_n_random_items(target_user_id, top_n)
+        random_n_items = self._get_n_random_items(target_user_id, top_n)
 
         # candidates movies for recommendation
         candidates_movies = self._get_candidates_items(target_user_id)
