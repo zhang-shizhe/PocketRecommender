@@ -3,5 +3,7 @@
 ## model：
 ### UserCF
 ### ItemCF
-### Swing:
+### Swing
 paper: https://arxiv.org/pdf/2010.05525.pdf
+### Wide & Deep
+paper: https://arxiv.org/pdf/1606.07792.pdf
